@@ -1,8 +1,17 @@
 apply plugin: "java"
 
 repositories {
-    mavenCentral()
+	mavenCentral()
+	maven {
+		url 'http://flexo.fearlessgames.se/artifactory/libs-local'
+		credentials {
+			username = "reader"
+			password = "f3ArlessGamesR0X!"
+		}
+	}
 }
 
 dependencies {
+	compile 'io.reactivex:rxnetty:0.4.8'
+	compile 'se.fearless.fearless-common:security:1.0-SNAPSHOT'
 }
