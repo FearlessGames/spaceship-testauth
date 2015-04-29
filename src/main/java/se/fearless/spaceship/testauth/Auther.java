@@ -23,6 +23,7 @@ public class Auther {
 		String userName = "foobar";
 		String password = "12345";
 		String feature = "spaceship";
+
 		Observable<SaltData> saltData = askFameForSalt(userName);
 
 		Observable<String> hash = hashUserNameAndPasswordUsingSalt(userName, password, saltData);
@@ -31,53 +32,63 @@ public class Auther {
 		Observable<String> authToken = authUserUsingHash(userName, hash);
 
 		String first = authToken.toBlocking().first();
-
-		Observable<String> sessionKey = loginToSpaceShipUsingAuthToken(authToken);
+        System.out.println(first);
+        Observable<String> sessionKey = loginToSpaceShipUsingAuthToken(authToken);
 
 	}
 
 	private static Observable<SaltData> askFameForSalt(String userName) {
-		Observable<HttpClientResponse<ByteBuf>> responseObservable = RxNetty.createHttpGet(BASE_PATH + userName + "/salt");
-
-		Observable<ByteBuf> data = responseObservable.flatMap(AbstractHttpContentHolder::getContent);
-
-		Observable<String> observable = data.map(byteBuf1 -> byteBuf1.toString(charset));
-
-		return observable.map(s -> jsonSerializer.fromJson(SaltData.class, s));
+        String uri = BASE_PATH + userName + "/salt";
+        return getDataFromFame(uri,  SaltData.class);
 	}
 
-	private static Observable<String> hashUserNameAndPasswordUsingSalt(final String userName, String password, Observable<SaltData> saltDataObservable) {
-		//sha512(bcrypt(username+password,usersalt)+onetimesalt)
-		//pwd in db is bcrypt(username+password, usersalt). //provided hash is sha512(bcrypt(username+password, usersalt)+onetimesalt)
+
+
+    private static Observable<String> hashUserNameAndPasswordUsingSalt(final String userName, String password, Observable<SaltData> saltDataObservable) {
 
 		final Digester digester = new Digester("beefcake");
 		return saltDataObservable.map(saltData-> {
-			String userHash = BCrypter.bcrypt(userName, saltData.getUserSalt());
+            System.out.println("UserSalt: " + saltData.getUserSalt());
+            System.out.println("OneTimeSalt: " + saltData.getOneTimeSalt());
+            String userHash = BCrypter.bcrypt(userName+password, saltData.getUserSalt());
 			return digester.sha512Hex(userHash + saltData.getOneTimeSalt());
 		});
-
 	}
 
 	private static Observable<String> authUserUsingHash(String userName, Observable<String> hashObservable) {
 
 		Observable<Observable<String>> observableObservable = hashObservable.map(hash -> {
-			Observable<HttpClientResponse<ByteBuf>> responseObservable = RxNetty.createHttpGet(BASE_PATH + userName + "/auth/spaceship/" + hash);
-			Observable<ByteBuf> data = responseObservable.flatMap(AbstractHttpContentHolder::getContent);
-			Observable<String> observable = data.map(byteBuf1 -> byteBuf1.toString(charset));
-			Observable<FameToken> fameTokenObservable = observable.map(s -> jsonSerializer.fromJson(FameToken.class, s));
+            String uri = BASE_PATH + userName + "/auth/spaceship/" + hash;
+            Observable<FameToken> fameTokenObservable = getDataFromFame(uri, FameToken.class);
 			return fameTokenObservable.map(fameToken -> fameToken.token);
 		});
 
 		return observableObservable.flatMap(stringObservable -> stringObservable);
 
-
 	}
+
+
 
 	private static Observable<String> loginToSpaceShipUsingAuthToken(Observable<String> authToken) {
 		return null;
 	}
 
+
 	private static class FameToken {
 		String token;
 	}
+
+
+    private static <T> Observable<T> getDataFromFame(String uri, Class<T> dataType) {
+        Observable<HttpClientResponse<ByteBuf>> httpClientResponseObservable = RxNetty.createHttpGet(uri);
+        Observable<ByteBuf> byteBufObservable = httpClientResponseObservable.flatMap(AbstractHttpContentHolder::getContent);
+        Observable<String> stringObservable = byteBufObservable.map(byteBuf1 -> byteBuf1.toString(charset));
+        return stringObservable.map(string -> {
+            System.out.println("fetched Json string: " + string + " of type " + dataType.toString());
+            return jsonSerializer.fromJson(dataType, string);
+
+
+        });
+    }
+
 }
